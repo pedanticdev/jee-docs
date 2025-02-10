@@ -1,48 +1,315 @@
-<!DOCTYPE html>
-<html>
-    <head>
-        <title>Welcome to Payara</title>
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Java and Generative AI</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reset.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/night.min.css">
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/highlight/monokai.min.css">
+    <style>
+        .reveal h1, .reveal h2 {
+            text-transform: none;
+        }
 
-        <style>
-            body {
-                background-image: linear-gradient(rgba(0,44,62), rgba(0,44,62,.8), rgba(0,44,62));
-                color: #fff;
-            }
-            a {
-                font-weight: bold;
-                color: white;
-            }
-        </style>
-    </head>
-    <body>
+        .reveal ul, .reveal ol {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+<div class="reveal">
+    <div class="slides">
+        <section>
+            <h1>Enhancing Enterprise Java Applications with Generative AI</h1>
+            <p>Practical Strategies for Jakarta EE and Spring Boot Platforms</p>
+        </section>
 
-        <h1>Greetings from Payara!</h1>
-        <p>
-            Thank you for visiting <a href="https://www.payara.fish/">Payara</a>! We're thrilled to have you here. Payara is your go-to destination for all things Jakarta EE and Java enterprise applications.
-        </p>
-        <p>
-            <a href="https://www.payara.fish/"><img width="50%" src="images/payara-fish-logo.svg" alt="Payara Logo"></a>
-        </p>
-        
-        <h2>RESTful Service</h2>
-        <p>
-            The REST end-point is available at <a href="resources/hello">resources/hello</a>.
-            You can supply a name to the end-point using a query parameter like this: <a href="resources/hello?name=John">resources/hello?name=John</a>
-        </p>
-        
-                
-        <h2>API Documentation</h2>
-        <p>
-            Explore the API documentation for the RESTful service using Swagger and OpenAPI. You can access the documentation at the following link:
-            <a href="swagger.html">Swagger and OpenAPI Documentation</a>
-        </p>
-        
-        <h2>Why Choose Payara?</h2>
-        <p>
-            Dive into the world of Jakarta EE with Payara. Our robust application server empowers you to build and deploy scalable, enterprise-ready solutions with ease.
-        </p>
-        <p>
-            Explore the incredible features of Payara, from seamless clustering to unparalleled support. Get started on your journey with Payara by checking out our <a href="https://docs.payara.fish/">documentation</a>.
-        </p>
-    </body>
+        <section>
+            <h2>Webinar Agenda</h2>
+            <ul>
+                <li>Framework-Specific AI Integration Techniques
+                    <ul>
+                        <li>Spring Boot with Spring AI</li>
+                        <li>Jakarta EE with LangChain4J</li>
+                    </ul>
+                </li>
+                <li>Advanced Architectural Insights
+                    <ul>
+                        <li>Asynchronous Processing</li>
+                        <li>Response Caching</li>
+                        <li>Security Considerations</li>
+                    </ul>
+                </li>
+                <li>Practical Implementation</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Why Generative AI in Enterprise Java?</h2>
+            <ul>
+                <li>Enhance legacy systems with AI capabilities</li>
+                <li>Improve user experiences with domain-specific insights</li>
+                <li>Maintain enterprise-grade reliability</li>
+                <li>Cost-effective implementation</li>
+                <li>Rapid integration cycles</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Framework-Specific Integration</h2>
+            <ul>
+                <li>Spring Boot with Spring AI
+                    <ul>
+                        <li>Native tooling for AI integration</li>
+                        <li>RAG pipeline using Firebase Storage</li>
+                        <li>PGVector-compatible Postgres (Neon DB)</li>
+                    </ul>
+                </li>
+                <li>Jakarta EE with LangChain4J
+                    <ul>
+                        <li>REST client patterns</li>
+                        <li>Similar RAG pipeline implementation</li>
+                    </ul>
+                </li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Spring Boot RAG Pipeline - Embedding</h2>
+            <pre><code class="java">  public void embedNewDocs() {
+        LOGGER.info("About to start embedding docs");
+        try {
+            List<String> objectKeys = firebaseBlobManager.listObjects();
+            List<String> embeddedDocs = new ArrayList<>();
+
+            Iterator<String> iterator = objectKeys.iterator();
+            while (iterator.hasNext()) {
+                String objectKey = iterator.next();
+                LOGGER.log(Level.INFO, "Embedding doc " + objectKey);
+
+                List<Document> documents = firebaseBlobManager.loadDocuments(objectKey);
+                LOGGER.info("Embedding docs loaded: " + documents.size());
+
+                if (!documents.isEmpty()) {
+                    vectorStore.add(splitDocuments(documents));
+                    embeddedDocs.add(objectKey);
+                    iterator.remove();
+                } else {
+                    LOGGER.log(Level.INFO, "No documents to embed for objectKey: " + objectKey);
+                }
+            }
+            firebaseBlobManager.moveEmbeddedDocument(embeddedDocs);
+
+        }catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error embedding docs", e);
+        }
+    }</code>
+
+
+        </section>
+        <section>
+            <h2>Spring Boot RAG Pipeline - Querying</h2>
+
+            <pre>
+        <code class="java">
+            public String chat(ChatRequest request) {
+        LOGGER.log(Level.INFO, "Making chat request-->  " + request);
+
+        ContextualQueryAugmenter queryAugmenter = ContextualQueryAugmenter.builder()
+                .promptTemplate(new SystemPromptTemplate(SYSTEM_MESSAGE))
+                .allowEmptyContext(Boolean.parseBoolean(allowEmptyContext))
+                .build();
+
+        Advisor advisor = RetrievalAugmentationAdvisor.builder()
+                .documentRetriever(VectorStoreDocumentRetriever.builder()
+                        .similarityThreshold(0.50)
+                        .vectorStore(vectorStore)
+                        .build())
+                .queryAugmenter(queryAugmenter)
+                .build();
+
+        ChatResponse response = ChatClient.builder(chatModel)
+                .build().prompt()
+                .advisors(advisor)
+                .user(request.userMessage())
+                .call()
+                .chatResponse();
+        LOGGER.log(Level.INFO, "Finished chat request -->  " + response);
+        if (response != null && response.getResult() != null) {
+            LOGGER.log(Level.INFO, "Finished chat request -->  " + response.getResult().getOutput().getText());
+            return response.getResult().getOutput().getText();
+        }
+
+        return null;
+    }
+        </code>
+    </pre>
+        </section>
+        <section>
+            <h2>Jakarta EE RAG Pipeline - Embedding </h2>
+            <pre><code class="java">public void embedNewDocs() {
+        log.log(Level.INFO, "Starting document embedding");
+        List<String> strings = documentLoader.listObjects();
+        log.log(Level.INFO, "About to embed found blob objects {0}", strings);
+
+        List<Document> documents = new ArrayList<>();
+        List<String> embeddedObjects = new ArrayList<>();
+        try {
+            for (String string : strings) {
+                documents.add(documentLoader.loadDocument(string));
+                embeddedObjects.add(string);
+            }
+            List<TextSegment> textSegments = new ArrayList<>();
+            for (Document document : documents) {
+                textSegments.addAll(splitter.split(document));
+                log.log(Level.INFO, "About to embed text segments {0}", textSegments);
+                List<Embedding> embeddings = embeddingModel.embedAll(textSegments).content();
+
+                log.log(Level.INFO, "About to embed {0}", embeddings);
+                embeddingStore.addAll(embeddings, textSegments);
+                ingestor.ingest(documents);
+                log.log(Level.INFO,"Embedding complete");
+            }
+        } catch (Exception e) {
+            log.log(Level.SEVERE, "An error occurred while processing embeddings", e);
+        }
+        if (!embeddedObjects.isEmpty()) {
+            log.log(Level.INFO, "Moving embedded objects {0}", embeddedObjects);
+            documentLoader.moveEmbeddedDocument(embeddedObjects);
+        }
+    }
+
+            </code></pre>
+        </section>
+
+        <section>
+            <h2>Jakarta EE RAG Pipeline - Querying </h2>
+            <pre>
+                <code class="java">
+                       @ApplicationScoped
+public class ChatService {
+
+    @Inject
+    OpenAiChatModel model;
+
+    @Inject PostgresEmbeddingService postgresEmbeddingService;
+
+    ChatInterface chatInterface;
+
+
+    @PostConstruct
+    void init() {
+        ContentRetriever contentRetriever = postgresEmbeddingService.getContentRetriever();
+        chatInterface =
+                AiServices.builder(ChatInterface.class)
+                        .chatLanguageModel(model)
+                        .contentRetriever(contentRetriever)
+                        .chatMemory(MessageWindowChatMemory.withMaxMessages(10))
+                        .build();
+
+    }
+
+
+
+    public ChatResponse chat(ChatRequest chatRequest) {
+        Result<AiMessage> chat = chatInterface.ask(chatRequest.userMessage());
+        return new ChatResponse(chat.content().text(), chatRequest);
+    }
+
+}
+                </code>
+            </pre>
+        </section>
+        <section>
+            <h2>Asynchronous Processing</h2>
+            <ul>
+                <li>Handle long-running AI tasks</li>
+                <li>Spring's @Async annotation</li>
+                <li>Jakarta's ManagedExecutorService</li>
+                <li>Batch processing operations</li>
+                <li>Error handling and retries</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Security Considerations</h2>
+            <ul>
+                <li>Secure API keys and credentials</li>
+                <li>Encrypt sensitive data</li>
+                <li>Role-based access control</li>
+                <li>Monitor AI service usage</li>
+                <li>Audit trails for compliance</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Architecture Overview</h2>
+            <ul>
+                <li>Cloud-native deployment</li>
+                <li>Microservices architecture</li>
+                <li>Vector store integration</li>
+                <li>Document storage management</li>
+                <li>Zero-ops deployment model</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Enterprise Features</h2>
+            <ul>
+                <li>Microprofile Config integration</li>
+                <li>Jakarta CDI for components</li>
+                <li>Connection pooling</li>
+                <li>Batch operations support</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Real-World Applications</h2>
+            <ul>
+                <li>Legacy System Enhancement
+                    <ul>
+                        <li>AI-powered documentation search</li>
+                        <li>Automated support responses</li>
+                    </ul>
+                </li>
+                <li>Modern Applications
+                    <ul>
+                        <li>Domain-specific Q&A</li>
+                        <li>Content generation</li>
+                    </ul>
+                </li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Future Developments</h2>
+            <ul>
+                <li>Enhanced security features</li>
+                <li>Multi-region deployment</li>
+                <li>Advanced embedding techniques</li>
+                <li>Additional vector store support</li>
+            </ul>
+        </section>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/notes/notes.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/markdown/markdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/highlight/highlight.min.js"></script>
+<script>
+    Reveal.initialize({
+        hash: true,
+        loop: true,
+        history: true,
+        controls: true,
+        slideNumber: true,
+        transition: 'convex',
+        plugins: [RevealMarkdown, RevealHighlight, RevealNotes]
+    });
+</script>
+</body>
 </html>

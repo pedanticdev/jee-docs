@@ -1,4 +1,6 @@
 package fish.payara.resource;
 
-public class ChatRequestMetadata {
+import java.util.Map;
+
+public record ChatRequestMetadata(Map<String, Object> metadata) {
 }
