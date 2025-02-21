@@ -5,10 +5,13 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @Provider
 public class CORSFilter implements ContainerResponseFilter {
@@ -26,14 +29,36 @@ public class CORSFilter implements ContainerResponseFilter {
 
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
+
+        Logger.getLogger(CORSFilter.class.getSimpleName()).log(Level.INFO, "CORS filter enabled. Allowed origins: {0}", allowedOrigins);
         final MultivaluedMap<String, Object> headers = responseContext.getHeaders();
-        headers.add("Access-Control-Allow-Origin", allowedOrigins);
-        headers.add("Access-Control-Allow-Headers", getRequestedAllowedHeaders(requestContext));
-        headers.add("Access-Control-Expose-Headers", getRequestedExposedHeaders(requestContext));
+//        headers.add("Access-Control-Allow-Origin", allowedOrigins);
+//        headers.add("Access-Control-Allow-Headers", "Access-Control-Allow-Headers, Access-Control-Allow-Origin, Origin, Accept, Authorization, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers");
+//        headers.add("Access-Control-Expose-Headers", getRequestedExposedHeaders(requestContext));
+//        headers.add("Access-Control-Allow-Credentials", "true");
+//        headers.add("Access-Control-Allow-Methods", ALLOWED_METHODS);
+//        headers.add("Access-Control-Max-Age", MAX_AGE);
+//        headers.add("x-responded-by", "cors-response-filter");
+//        responseContext.setStatus(Response.Status.OK.getStatusCode());
+
+        // Handle preflight
+        if (requestContext.getMethod().equalsIgnoreCase("OPTIONS")) {
+            headers.add("Access-Control-Allow-Origin", allowedOrigins);
+            headers.add("Access-Control-Allow-Methods", ALLOWED_METHODS);
+            headers.add("Access-Control-Allow-Headers", "Access-Control-Allow-Headers, Access-Control-Allow-Origin, Origin, Accept, Authorization, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers");
+            headers.add("Access-Control-Allow-Credentials", "true");
+            headers.add("Access-Control-Max-Age", "1209600");
+            responseContext.setStatus(Response.Status.OK.getStatusCode());
+
+            return;
+        }
+
+        // Non-preflight requests
         headers.add("Access-Control-Allow-Credentials", "true");
-        headers.add("Access-Control-Allow-Methods", ALLOWED_METHODS);
-        headers.add("Access-Control-Max-Age", MAX_AGE);
-        headers.add("x-responded-by", "cors-response-filter");
+        headers.add("Access-Control-Expose-Headers", "Access-Control-Allow-Headers, Access-Control-Allow-Origin, Origin, Accept, Authorization, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers");
+        responseContext.setStatus(Response.Status.OK.getStatusCode());
+
+
     }
 
     private boolean isProd() {

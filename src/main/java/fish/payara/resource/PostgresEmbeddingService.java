@@ -18,6 +18,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import jakarta.annotation.sql.DataSourceDefinition;
 import jakarta.ejb.Singleton;
+import jakarta.enterprise.concurrent.ManagedExecutorService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -45,6 +46,10 @@ import java.util.logging.Logger;
 @ApplicationScoped
 public class PostgresEmbeddingService implements EmbeddingService {
     Logger log = Logger.getLogger(PostgresEmbeddingService.class.getName());
+
+
+    @Resource
+    ManagedExecutorService managedExecutorService;
 
     @Resource(lookup = "java:app/NeonDB")
     DataSource dataSource;
@@ -109,6 +114,7 @@ public class PostgresEmbeddingService implements EmbeddingService {
                 new TimerTask() {
                     @Override
                     public void run() {
+//                        managedExecutorService.submit(() -> embedNewDocs());
                         embedNewDocs();
                     }
                 },
@@ -116,7 +122,6 @@ public class PostgresEmbeddingService implements EmbeddingService {
                 intervalMinutes * 1000L);
     }
 
-    @WithSpan("Postgres doc embedding")
     public void embedNewDocs() {
         log.log(Level.INFO, "Starting document embedding");
         List<String> strings = documentLoader.listObjects();

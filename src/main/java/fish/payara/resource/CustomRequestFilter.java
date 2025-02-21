@@ -16,18 +16,14 @@ import java.util.logging.Logger;
 
 @Provider
 @Priority(Priorities.AUTHENTICATION)
-public class CustomerRequestFilter implements ContainerRequestFilter {
-    static final Logger LOGGER = Logger.getLogger(CustomerRequestFilter.class.getName());
+public class CustomRequestFilter implements ContainerRequestFilter {
+    static final Logger LOGGER = Logger.getLogger(CustomRequestFilter.class.getName());
     @Inject
     AuthController authController;
 
     @Override
     public void filter(final ContainerRequestContext requestContext) {
         LOGGER.log(Level.FINE, "Entering CustomerRequestFilter filter");
-        if (requestContext.getRequest().getMethod().equals("OPTIONS")) {
-            LOGGER.log(Level.FINE, "This is a OPTIONS request");
-            return; // Skip auth for preflight
-        }
         String authHeader = requestContext.getHeaderString(HttpHeaders.AUTHORIZATION);
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             requestContext.abortWith(
