@@ -1,56 +1,153 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Interface</title>
+    <title>Enterprise Java and Generative AI</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reset.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/night.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/highlight/monokai.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Add minor custom styles if needed */
-        .h-screen-minus-header-footer {
-            /* Calculate height dynamically based on header/footer */
-            /* Adjust 120px if your actual header/footer height differs */
-            height: calc(100vh - 120px);
-        }
-        /* Basic styling for code blocks */
-        .code-block {
-            background-color: #1f2937; /* bg-gray-800 */
-            color: #f9fafb; /* text-white */
-            padding: 1rem; /* p-4 */
-            border-radius: 0.5rem; /* rounded-lg */
-            overflow-x: auto;
-            margin-top: 0.5rem;
-            margin-bottom: 0.5rem;
-            font-family: monospace; /* Ensure monospace font */
-            white-space: pre; /* Preserve whitespace and line breaks */
-        }
-        .code-block code {
-            /* Specific styling for the code element if needed */
-            display: block; /* Ensure it takes block space */
-        }
-        /* Simple spinner animation */
-        .spin {
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
+        /* Basic styles */
+        .reveal h1, .reveal h2 { text-transform: none; }
+        .h-screen-minus-header-footer { height: calc(100vh - 120px); }
+        .code-block { background-color: #1f2937; color: #f9fafb; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin-top: 0.5rem; margin-bottom: 0.5rem; font-family: monospace; white-space: pre; }
+        .reveal ul, .reveal ol { display: block; }
+        .code-block code { display: block; }
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        /* Hide content until authenticated and initialized */
+        .hidden-until-ready { display: none; }
+        /* Basic error message styling */
+        .error-message { padding: 20px; background-color: #ffdddd; border: 1px solid red; color: #d8000c; margin: 10px; border-radius: 5px; }
+        .error-message h1 { color: #d8000c; margin-bottom: 10px; }
+        .error-message pre { white-space: pre-wrap; word-wrap: break-word; background-color: #f9f2f4; padding: 10px; border-radius: 3px; margin-top: 10px; }
     </style>
-</head>
-<body class="bg-gray-50">
 
-<div class="flex flex-col h-screen">
-    <div class="w-full max-w-6xl mx-auto flex flex-col flex-grow">
+    <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-auth-compat.js"></script>
+
+    <script>
+        // --- Step 1: Fetch Config and Initialize Firebase ---
+        async function initializeFirebase() {
+            try {
+                console.log("Attempting to fetch config.json...");
+                // Fetch the config file relative to the HTML page's URL
+                const response = await fetch('config.json');
+
+                if (!response.ok) {
+                    // Handle case where config.json isn't found or server error
+                    throw new Error(`HTTP error! status: ${response.status} while fetching config.json. Make sure the file exists and is served correctly.`);
+                }
+
+                // Parse the response body as JSON
+                const firebaseConfig = await response.json();
+                console.log(firebaseConfig);
+                console.log("config.json fetched successfully.");
+
+                // Basic validation of the fetched config
+                if (!firebaseConfig || typeof firebaseConfig !== 'object' || !firebaseConfig.apiKey || !firebaseConfig.authDomain) {
+                    throw new Error("Fetched configuration is invalid or missing required fields (apiKey, authDomain).");
+                }
+
+                // Initialize Firebase with the fetched config
+                firebase.initializeApp(firebaseConfig);
+                console.log("Firebase initialized successfully using fetched config.");
+
+                // Return the auth service instance
+                return firebase.auth();
+
+            } catch (error) {
+                console.error("FATAL ERROR: Could not initialize Firebase.", error);
+                // Display a user-friendly error message and stop the app
+                document.body.innerHTML = `
+                    <div class="error-message">
+                        <h1>Application Initialization Failed</h1>
+                        <p>Could not load necessary configuration to start the application. Please ensure 'config.json' is present and correctly served, or contact support.</p>
+                        <pre>Error details: ${error.message}</pre>
+                    </div>`;
+                return null; // Indicate initialization failure
+            }
+        }
+
+        // --- Step 2: Run Initialization and then Handle Authentication ---
+        initializeFirebase().then(authService => {
+            // Only proceed if Firebase initialization was successful (authService is not null)
+            if (authService) {
+                console.log("Firebase is ready. Setting up authentication listener.");
+
+                // --- Step 3: Authentication State Listener ---
+                authService.onAuthStateChanged(user => {
+                    const chatContainer = document.getElementById('chat-container');
+
+                    if (user) {
+                        // User is signed in.
+                        console.log("User is authenticated:", user.uid);
+                        if (chatContainer) {
+                            chatContainer.classList.remove('hidden-until-ready'); // Show the main content
+                            chatContainer.style.display = 'block'; // Ensure it's visible
+                        } else {
+                            console.error("Chat container element not found!");
+                        }
+
+                        // Ensure the DOM is fully loaded before initializing the chat UI
+                        // Pass the authService instance to the UI initializer
+                        if (document.readyState === 'loading') {
+                            document.addEventListener('DOMContentLoaded', () => initializeChatInterface(authService));
+                        } else {
+                            initializeChatInterface(authService);
+                        }
+                    } else {
+                        // User is signed out.
+                        console.log("User not authenticated. Redirecting to login.");
+                        // Redirect to login page (ensure login.html also uses a similar init process)
+                        window.location.replace('login.html'); // Adjust path if needed
+                    }
+                });
+
+            } else {
+                // Initialization failed, error message already shown.
+                console.error("Application cannot proceed because Firebase initialization failed.");
+            }
+        }).catch(error => {
+            // Catch any unexpected errors during the promise chain itself
+            console.error("Unexpected error during initialization promise chain:", error);
+            document.body.innerHTML = `<div class="error-message"><h1>Unexpected Application Error</h1><p>An unexpected error occurred during startup.</p><pre>${error.message}</pre></div>`;
+        });
+
+    </script>
+
+</head>
+<body>
+<div id="chat-container" class="hidden-until-ready">
+
+    <div class="reveal">
+        <div class="slides">
+            <section>
+                <h3>Enhancing Enterprise Java Applications with Generative AI</h3>
+            </section>
+            <section>
+                <h2>Try Payara Cloud Today</h2>
+                <p><a href="https://cloud.payara.fish" target="_blank">payara.cloud</a></p>
+            </section>
+        </div>
+    </div>
+
+    <div class="flex flex-col h-screen"> <div class="w-full max-w-6xl mx-auto flex flex-col flex-grow">
         <div class="flex justify-end p-2">
             <button
                     id="clear-history-button"
-                    class="text-sm text-gray-500 hover:text-red-500 px-3 py-1 rounded-md hover:bg-red-50"
-            >
+                    class="text-sm text-gray-500 hover:text-red-500 px-3 py-1 rounded-md hover:bg-red-50">
                 Clear History
             </button>
+            <button
+                    id="logout-button"
+                    class="text-sm text-gray-500 hover:text-yellow-500 px-3 py-1 rounded-md hover:bg-yellow-50 ml-2">
+                Logout
+            </button>
         </div>
-
         <div id="message-list" class="flex-1 overflow-y-auto p-4 space-y-4 h-screen-minus-header-footer">
         </div>
 
@@ -67,342 +164,383 @@
                         type="button"
                         id="mic-button"
                         class="p-2 text-blue-500 hover:text-blue-700"
-                        title="Voice input (not implemented)"
-                >
+                        title="Voice input (not implemented)" >
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
                 </button>
                 <button
                         type="submit"
                         id="send-button"
-                        class="p-2 text-blue-500 hover:text-blue-700 disabled:opacity-50"
-                >
+                        class="p-2 text-blue-500 hover:text-blue-700 disabled:opacity-50" >
                     <svg id="send-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
                 </button>
             </form>
         </div>
-
-        <div class="text-center p-2 text-xs text-gray-500 border-t border-gray-200 bg-white flex items-center justify-center gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-            Built with Jakarta EE + MicroProfile + React With
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-red-500"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>.
-        </div>
     </div>
-</div>
+    </div>
+
+    <div class="text-center p-2 text-xs text-gray-500 border-t border-gray-200 bg-white flex items-center justify-center gap-1">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        Built with Jakarta EE + MicroProfile + React With
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-red-500"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>.
+    </div>
+
+</div> <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/notes/notes.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/markdown/markdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/highlight/highlight.min.js"></script>
 
 <script>
-    // --- Constants ---
-    const STORAGE_KEY = 'chat_messages_vanilla'; // Key for storing messages in localStorage
-    // --- API Configuration ---
-    const API_BASE_URL = 'http://localhost:8080/chat/api/v1/chat';
-    // const API_BASE_URL = 'https://jakarta101.com/jee-docs/chat/api/v1';
-    const API_TIMEOUT = 30000; // Timeout for API requests in milliseconds (30 seconds)
+    // --- Step 4: Define the Chat Interface Initialization Function ---
+    // This function is called ONLY after Firebase is ready and the user is authenticated.
+    function initializeChatInterface(authService) {
+        console.log("Initializing Reveal.js and Chat Interface...");
 
-    // --- DOM Element References ---
-    const messageList = document.getElementById('message-list');
-    const chatForm = document.getElementById('chat-form');
-    const chatInput = document.getElementById('chat-input');
-    const sendButton = document.getElementById('send-button');
-    const sendIcon = document.getElementById('send-icon'); // The SVG icon inside the send button
-    const clearHistoryButton = document.getElementById('clear-history-button');
-    const micButton = document.getElementById('mic-button'); // Mic button (functionality not implemented)
-
-    // --- Application State ---
-    let messages = []; // Array to hold all chat messages { content: string, isUser: boolean }
-    let isLoading = false; // Flag to track if an API request is in progress
-
-    // --- Authentication ---
-    /**
-     * Retrieves the authentication token.
-     * @returns {string|null} The authentication token or null if not found.
-     */
-    function getAuthToken() {
-        const token = localStorage.getItem('authToken');
-        if (!token) {
-            console.warn("Authentication token not found in localStorage (key: 'authToken'). Ensure the user is logged in and the token is stored correctly.");
-        }
-        return token;
-    }
-
-
-    /**
-     * Loads messages from localStorage when the application starts.
-     */
-    function loadMessages() {
-        const savedMessages = localStorage.getItem(STORAGE_KEY);
-        messages = savedMessages ? JSON.parse(savedMessages) : [];
-        renderMessages(); // Display the loaded messages
-        console.log(`Loaded ${messages.length} messages from localStorage.`);
-    }
-
-    /**
-     * Saves the current `messages` array to localStorage.
-     */
-    function saveMessages() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-        // console.log("Messages saved to localStorage."); // For debugging
-    }
-
-    /**
-     * Renders all messages currently in the `messages` array to the DOM.
-     * Clears the existing message list first.
-     */
-    function renderMessages() {
-        messageList.innerHTML = ''; // Clear the list before rendering
-        messages.forEach(msg => addMessageToDOM(msg, false)); // Add each message without re-saving
-        scrollToBottom(); // Ensure the view scrolls down
-    }
-
-    /**
-     * Creates and appends a single message element to the message list in the DOM.
-     * @param {object} msg - The message object { content: string, isUser: boolean }.
-     * @param {boolean} [shouldSave=true] - Whether to save the messages array to localStorage after adding.
-     */
-    function addMessageToDOM(msg, shouldSave = true) {
-        const messageElement = document.createElement('div');
-        // Base classes for alignment
-        messageElement.className = `flex items-start gap-2 ${msg.isUser ? 'justify-end' : 'justify-start'}`;
-
-        // Container for the message bubble content
-        const contentWrapper = document.createElement('div');
-        contentWrapper.className = `max-w-2xl p-4 rounded-lg shadow-md break-words ${ // Added break-words
-            msg.isUser
-                ? 'bg-blue-600 text-white' // User message style
-                : 'bg-blue-50 text-gray-800 border border-blue-100' // Bot message style
-        }`;
-
-        // --- Basic Code Block Handling ---
-        // This looks for ``` fenced blocks and wraps them in <pre><code>.
-        // It does NOT parse full Markdown.
-        const codeBlockRegex = /```(\w*)?\n?([\s\S]*?)```/g; // Regex to find code blocks
-        let lastIndex = 0;
-        let contentHTML = '';
-
-        // Iterate through matches of the regex
-        msg.content.replace(codeBlockRegex, (match, lang, code, offset) => {
-            // Append text content found *before* this code block
-            contentHTML += escapeHTML(msg.content.substring(lastIndex, offset)).replace(/\n/g, '<br>');
-            // Append the formatted code block
-            // Added language class for potential syntax highlighting later
-            contentHTML += `<pre class="code-block"><code class="language-${escapeHTML(lang || 'text')}">${escapeHTML(code.trim())}</code></pre>`;
-            // Update the index to search from after this block
-            lastIndex = offset + match.length;
-            return match; // Required by String.prototype.replace
+        // Initialize Reveal.js
+        Reveal.initialize({
+            hash: true,
+            loop: true,
+            history: true,
+            controls: true,
+            slideNumber: true,
+            transition: 'convex', // Example transition
+            plugins: [RevealMarkdown, RevealHighlight, RevealNotes]
         });
 
-        // Append any remaining text content *after* the last code block (or all text if no blocks)
-        contentHTML += escapeHTML(msg.content.substring(lastIndex)).replace(/\n/g, '<br>');
+        // --- Chat Constants ---
+        const STORAGE_KEY = 'chat_messages_vanilla';
+        // Ensure API endpoint is correct for your backend
+        const API_BASE_URL = 'http://localhost:8080/chat/api/v1/chat';
+        const API_TIMEOUT = 30000; // 30 seconds
 
-        // Set the processed content (mix of text and <pre> blocks)
-        // Using innerHTML is necessary here. Ensure escapeHTML is used for text parts.
-        contentWrapper.innerHTML = contentHTML;
+        // --- DOM Element References ---
+        const messageList = document.getElementById('message-list');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const sendButton = document.getElementById('send-button');
+        const sendIcon = document.getElementById('send-icon');
+        const clearHistoryButton = document.getElementById('clear-history-button');
+        const logoutButton = document.getElementById('logout-button');
+        const micButton = document.getElementById('mic-button'); // Optional
 
-        // Container for the user/bot icon
-        const iconContainer = document.createElement('div');
-        iconContainer.className = `flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${msg.isUser ? 'bg-blue-600' : 'bg-blue-100'}`; // Added flex-shrink-0
+        // --- Application State ---
+        let messages = []; // Holds chat message objects { content: string, isUser: boolean }
+        let isLoading = false; // Tracks if an API request is in progress
 
-        // Add icon and content bubble in the correct order based on who sent the message
-        if (msg.isUser) {
-            // User Icon SVG
-            iconContainer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-white"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
-            messageElement.appendChild(contentWrapper); // Content first for user
-            messageElement.appendChild(iconContainer); // Icon second for user
-        } else {
-            // Bot Icon SVG
-            iconContainer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-blue-600"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>`;
-            messageElement.appendChild(iconContainer); // Icon first for bot
-            messageElement.appendChild(contentWrapper); // Content second for bot
-        }
-
-        // Add the complete message element (icon + bubble) to the list
-        messageList.appendChild(messageElement);
-
-        // Save messages to localStorage if requested
-        if (shouldSave) {
-            saveMessages();
-        }
-        scrollToBottom(); // Scroll down after adding a message
-    }
-
-    /**
-     * Escapes HTML special characters to prevent XSS attacks when using innerHTML.
-     * @param {string} str - The string to escape.
-     * @returns {string} The escaped string.
-     */
-    function escapeHTML(str) {
-        // Create a temporary div element
-        const div = document.createElement('div');
-        // Set its textContent to the input string (browser handles escaping)
-        div.textContent = str;
-        // Return the innerHTML of the div, which now contains the escaped string
-        return div.innerHTML;
-    }
-
-
-    /**
-     * Scrolls the message list container to the bottom.
-     */
-    function scrollToBottom() {
-        messageList.scrollTop = messageList.scrollHeight;
-    }
-
-    /**
-     * Updates the UI elements (button, input field, icon) based on the loading state.
-     * @param {boolean} loading - Whether the application is currently loading a response.
-     */
-    function updateLoadingState(loading) {
-        isLoading = loading;
-        sendButton.disabled = isLoading; // Disable send button while loading
-        chatInput.disabled = isLoading; // Disable input field while loading
-        if (isLoading) {
-            sendIcon.classList.add('spin'); // Add spin animation to the send icon
-        } else {
-            sendIcon.classList.remove('spin'); // Remove spin animation
-        }
-    }
-
-    /**
-     * Handles the submission of the chat form.
-     * Sends the user message to the API and displays the response.
-     * @param {Event} event - The form submission event.
-     */
-    async function handleSubmit(event) {
-        event.preventDefault();
-        const userInput = chatInput.value.trim();
-
-        // Do nothing if input is empty or already loading
-        if (!userInput || isLoading) return;
-
-        // 1. Display User Message Immediately
-        const userMessage = { content: userInput, isUser: true };
-        messages.push(userMessage);
-        addMessageToDOM(userMessage);
-        chatInput.value = '';
-        chatInput.focus();
-a
-        // 2. Prepare for API Call
-        updateLoadingState(true); // Set loading state (disables input/button, starts spinner)
-        const token = getAuthToken(); // Retrieve the auth token
-
-        // Handle case where token is missing
-        if (!token) {
-            console.error("Cannot send message: Authentication token is missing.");
-            const errorMessage = { content: 'Authentication failed. Please log in again.', isUser: false };
-            messages.push(errorMessage);
-            addMessageToDOM(errorMessage); // Show error in chat
-            updateLoadingState(false); // Reset loading state
-            return; // Stop processing
-        }
-
-        // 3. Make API Request with Timeout
-        const controller = new AbortController(); // To handle fetch timeout
-        const timeoutId = setTimeout(() => {
-            controller.abort(); // Abort fetch if timeout is reached
-            console.warn(`API request timed out after ${API_TIMEOUT / 1000} seconds.`);
-        }, API_TIMEOUT);
-
-        try {
-            console.log(`Sending message to ${API_BASE_URL}/chat`);
-            const response = await fetch(`${API_BASE_URL}/chat`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`, // Include auth token
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    userMessage: userInput,
-                    metadata: null // Add any relevant metadata if needed
-                }),
-                signal: controller.signal // Link abort controller to fetch
-            });
-
-            clearTimeout(timeoutId); // Clear the timeout timer if fetch succeeded or failed normally
-
-            // 4. Handle API Response
-            if (!response.ok) {
-                // Attempt to parse error details from the response body
-                let errorDetails = `API request failed with status ${response.status}`;
+        // --- Authentication Helper ---
+        /**
+         * Retrieves the current Firebase ID token using the provided auth service instance.
+         * @param {firebase.auth.Auth} authInstance - The initialized Firebase Auth service.
+         * @returns {Promise<string|null>} A promise resolving with the token or null.
+         */
+        async function getAuthToken(authInstance) {
+            // Check if authInstance is valid
+            if (!authInstance || typeof authInstance.currentUser === 'undefined') {
+                console.error("getAuthToken called with invalid authInstance.");
+                handleLogout(authInstance); // Attempt logout if auth seems broken
+                return null;
+            }
+            const currentUser = authInstance.currentUser;
+            if (currentUser) {
                 try {
-                    const errorData = await response.json();
-                    // Append message from backend error response if available
-                    errorDetails += `: ${errorData.message || JSON.stringify(errorData)}`;
-                } catch (e) {
-                    // If response body isn't JSON or parsing fails, use status text
-                    errorDetails += ` ${response.statusText}`;
+                    // Get fresh token (Firebase SDK handles caching/refreshing)
+                    const token = await currentUser.getIdToken(false);
+                    return token;
+                } catch (error) {
+                    console.error("Error getting Firebase ID token:", error);
+                    // Handle specific errors that might indicate need for re-login
+                    if (error.code === 'auth/user-token-expired' || error.code === 'auth/internal-error' || error.code === 'auth/user-disabled') {
+                        handleLogout(authInstance); // Force logout on critical token errors
+                    }
+                    return null;
                 }
-                // Throw an error to be caught by the catch block
-                throw new Error(errorDetails);
+            } else {
+                // This case should ideally be caught by onAuthStateChanged, but good to handle defensively
+                console.warn("getAuthToken called but no user is authenticated.");
+                handleLogout(authInstance); // Ensure logout state
+                return null;
+            }
+        }
+
+        // --- Message Handling Functions ---
+        function loadMessages() {
+            const savedMessages = localStorage.getItem(STORAGE_KEY);
+            messages = savedMessages ? JSON.parse(savedMessages) : [];
+            renderMessages();
+            console.log(`Loaded ${messages.length} messages from localStorage.`);
+        }
+
+        function saveMessages() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+        }
+
+        function renderMessages() {
+            if (!messageList) {
+                console.error("Message list element not found for rendering.");
+                return;
+            }
+            messageList.innerHTML = ''; // Clear existing messages
+            messages.forEach(msg => addMessageToDOM(msg, false)); // Render each message without re-saving
+            scrollToBottom(); // Scroll to the latest message
+        }
+
+        function addMessageToDOM(msg, shouldSave = true) {
+            if (!messageList) {
+                console.error("Message list element not found for adding message.");
+                return;
+            }
+            const messageElement = document.createElement('div');
+            messageElement.className = `flex items-start gap-2 ${msg.isUser ? 'justify-end' : 'justify-start'} mb-4`; // Added margin-bottom
+
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = `max-w-xl lg:max-w-2xl p-3 px-4 rounded-lg shadow-md break-words ${ // Adjusted max-width and padding
+                msg.isUser
+                    ? 'bg-blue-600 text-white rounded-br-none' // User message style
+                    : 'bg-gray-100 text-gray-800 border border-gray-200 rounded-bl-none' // Bot message style
+            }`;
+
+            // Simple code block handling (find ``` blocks)
+            const codeBlockRegex = /```(\w*?)?\n?([\s\S]*?)```/g;
+            let lastIndex = 0;
+            let contentHTML = '';
+
+            // Use replace to iterate through matches and build HTML
+            msg.content.replace(codeBlockRegex, (match, lang, code, offset) => {
+                // Append text before the code block
+                contentHTML += escapeHTML(msg.content.substring(lastIndex, offset)).replace(/\n/g, '<br>');
+                // Append the formatted code block
+                contentHTML += `<pre class="code-block my-2"><code class="language-${escapeHTML(lang || 'text')}">${escapeHTML(code.trim())}</code></pre>`; // Added margin
+                lastIndex = offset + match.length;
+                return match; // Necessary for replace
+            });
+            // Append any remaining text after the last code block
+            contentHTML += escapeHTML(msg.content.substring(lastIndex)).replace(/\n/g, '<br>');
+
+            // Set the potentially mixed HTML content
+            contentWrapper.innerHTML = contentHTML;
+
+            // Icon container
+            const iconContainer = document.createElement('div');
+            iconContainer.className = `flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-1 ${msg.isUser ? 'bg-blue-600' : 'bg-gray-200'}`; // Adjusted icon background
+
+            // Add icon and content in the correct order
+            if (msg.isUser) {
+                // User Icon
+                iconContainer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-white"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+                messageElement.appendChild(contentWrapper); // Content first
+                messageElement.appendChild(iconContainer);   // Icon second
+            } else {
+                // Bot Icon
+                iconContainer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-blue-700"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>`;
+                messageElement.appendChild(iconContainer);   // Icon first
+                messageElement.appendChild(contentWrapper); // Content second
             }
 
-            // Parse successful response
-            const data = await response.json();
-            console.log("Received API response:", data);
+            messageList.appendChild(messageElement);
 
-            // Create and display the bot's message
-            const botMessage = {
-                content: data.chatResponse || 'Sorry, I received an empty response.', // Fallback message
-                isUser: false
-            };
-            messages.push(botMessage);
-            addMessageToDOM(botMessage); // Add bot message to DOM and save
+            if (shouldSave) {
+                saveMessages();
+            }
+            scrollToBottom(); // Scroll down after adding
+        }
 
-        } catch (error) {
-            // 5. Handle Errors (Network, Timeout, API Error)
-            console.error('Error fetching chat response:', error);
-            clearTimeout(timeoutId); // Ensure timeout is cleared on error too
+        function escapeHTML(str) {
+            // Basic HTML escaping
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
 
-            let errorText = 'Sorry, there was an error processing your request.'; // Default error
-            if (error.name === 'AbortError') {
-                errorText = `The request timed out after ${API_TIMEOUT / 1000} seconds. Please try again.`;
-            } else if (error.message && error.message.includes('Failed to fetch')) {
-                // Network error (e.g., API down, CORS issue, DNS error)
-                errorText = 'Could not connect to the chat service. Please check your network connection or the API status.';
-            } else if (error.message) {
-                // Use the specific error message thrown from the !response.ok block or other fetch errors
-                // Be cautious about displaying raw error messages to users if they might contain sensitive info
-                // errorText = `Error: ${error.message}`; // Example: Displaying more detail (use with caution)
-                errorText = `An error occurred: ${error.message.split(':')[0]}`; // Display only the first part for brevity
+        function scrollToBottom() {
+            if (messageList) {
+                messageList.scrollTop = messageList.scrollHeight;
+            }
+        }
+
+        // --- UI State Update ---
+        function updateLoadingState(loading) {
+            isLoading = loading;
+            if(sendButton) sendButton.disabled = isLoading;
+            if(chatInput) chatInput.disabled = isLoading;
+            if(sendIcon) {
+                if (isLoading) {
+                    sendIcon.classList.add('spin');
+                } else {
+                    sendIcon.classList.remove('spin');
+                }
+            }
+        }
+
+        // --- Form Submission Handler ---
+        async function handleSubmit(event) {
+            event.preventDefault(); // Prevent page reload
+            if (!chatInput) return; // Should not happen if initialized correctly
+            const userInput = chatInput.value.trim();
+
+            if (!userInput || isLoading) return; // Ignore empty input or if already loading
+
+            // Display user message immediately
+            const userMessage = { content: userInput, isUser: true };
+            messages.push(userMessage);
+            addMessageToDOM(userMessage);
+            chatInput.value = ''; // Clear input field
+            chatInput.focus();
+
+            updateLoadingState(true); // Show loading state
+
+            // Get fresh authentication token
+            const token = await getAuthToken(authService); // Pass the authService instance
+
+            if (!token) {
+                console.error("Cannot send message: Authentication token is missing or failed to retrieve.");
+                const errorMessage = { content: 'Authentication error. Please try logging out and back in.', isUser: false };
+                messages.push(errorMessage);
+                addMessageToDOM(errorMessage); // Show error in chat
+                updateLoadingState(false);
+                // Optional: Force logout if token is invalid
+                // handleLogout(authService);
+                return; // Stop processing this message
             }
 
-            // Display error message in the chat interface
-            const errorMessage = { content: errorText, isUser: false };
-            messages.push(errorMessage);
-            addMessageToDOM(errorMessage); // Add error message to DOM and save
-        } finally {
-            // 6. Cleanup
-            updateLoadingState(false); // Reset loading state regardless of success or failure
+            // Prepare for API request with timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => {
+                controller.abort();
+                console.warn(`API request timed out after ${API_TIMEOUT / 1000} seconds.`);
+            }, API_TIMEOUT);
+
+            // --- API Call ---
+            try {
+                console.log(`Sending message to API: ${API_BASE_URL}`);
+                const response = await fetch(API_BASE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`, // Include the Firebase ID token
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userMessage: userInput,
+                        // Add any other relevant data your backend expects
+                        // metadata: { sessionId: 'some-session-id' }
+                    }),
+                    signal: controller.signal // Link abort controller
+                });
+
+                clearTimeout(timeoutId); // Clear timeout if fetch completes
+
+                // Handle non-successful API responses
+                if (!response.ok) {
+                    let errorDetails = `API request failed with status ${response.status}`;
+                    try {
+                        // Try to get more specific error from response body
+                        const errorData = await response.json();
+                        errorDetails += `: ${errorData.message || JSON.stringify(errorData)}`;
+                    } catch (e) {
+                        // If response body isn't JSON or parsing fails
+                        errorDetails += ` ${response.statusText}`;
+                    }
+                    // Specific handling for auth errors from backend
+                    if (response.status === 401 || response.status === 403) {
+                        errorDetails += ". Your session might be invalid. Try logging out and back in.";
+                        // Consider forcing logout here: handleLogout(authService);
+                    }
+                    throw new Error(errorDetails); // Throw error to be caught below
+                }
+
+                // Process successful response
+                const data = await response.json();
+                console.log("Received API response:", data);
+
+                const botMessage = {
+                    // Adjust based on your actual API response structure
+                    content: data.chatResponse || data.message || 'Sorry, I received an unexpected response.',
+                    isUser: false
+                };
+                messages.push(botMessage);
+                addMessageToDOM(botMessage); // Add bot message to UI and save
+
+            } catch (error) {
+                // Handle fetch errors (network, timeout, thrown errors)
+                console.error('Error fetching chat response:', error);
+                clearTimeout(timeoutId); // Ensure timeout is cleared on error
+
+                let errorText = 'Sorry, there was an error processing your request.';
+                if (error.name === 'AbortError') {
+                    errorText = `The request timed out. Please try again.`;
+                } else if (error.message && error.message.includes('Failed to fetch')) {
+                    // Network error (API down, CORS, DNS issues etc.)
+                    errorText = 'Could not connect to the chat service. Please check the connection or API status.';
+                } else if (error.message) {
+                    // Use the specific error message (e.g., from !response.ok block)
+                    // Be cautious about showing raw errors directly if they might contain sensitive info
+                    errorText = `An error occurred: ${error.message}`;
+                }
+
+                // Display error message in the chat
+                const errorMessage = { content: errorText, isUser: false };
+                messages.push(errorMessage);
+                addMessageToDOM(errorMessage);
+
+            } finally {
+                // Always reset loading state
+                updateLoadingState(false);
+            }
         }
-    }
 
-    /**
-     * Clears the chat history from the state, DOM, and localStorage after confirmation.
-     */
-    function clearHistory() {
-        // Ask for confirmation before clearing
-        if (window.confirm('Are you sure you want to clear the entire chat history? This cannot be undone.')) {
-            messages = []; // Clear the messages array
-            localStorage.removeItem(STORAGE_KEY); // Remove from localStorage
-            messageList.innerHTML = ''; // Clear the messages from the display
-            console.log("Chat history cleared.");
+        // --- History and Logout ---
+        function clearHistory() {
+            if (window.confirm('Are you sure you want to clear the chat history for this session?')) {
+                messages = []; // Clear in-memory array
+                localStorage.removeItem(STORAGE_KEY); // Clear storage
+                if(messageList) messageList.innerHTML = ''; // Clear UI
+                console.log("Chat history cleared.");
+            }
         }
-    }
 
+        // Logout function needs the authService instance
+        function handleLogout(authInstance) {
+            if (!authInstance) {
+                console.warn("Attempted logout without valid auth instance.");
+                // Fallback redirect if auth instance is somehow lost
+                window.location.replace('login.html');
+                return;
+            }
+            authInstance.signOut().then(() => {
+                console.log('User signed out successfully.');
+                localStorage.removeItem(STORAGE_KEY); // Clear chat history on logout
+                localStorage.removeItem('authToken'); // Clear any old manually stored token (if used previously)
+                window.location.replace('login.html'); // Redirect to login
+            }).catch((error) => {
+                console.error('Sign out error:', error);
+                // Still attempt redirect even if signout fails locally
+                window.location.replace('login.html');
+            });
+        }
 
+        // --- Event Listeners Setup ---
+        if (chatForm) {
+            chatForm.addEventListener('submit', handleSubmit);
+        } else {
+            console.error("Chat form element not found!");
+        }
+        if (clearHistoryButton) {
+            clearHistoryButton.addEventListener('click', clearHistory);
+        }
+        if (logoutButton) {
+            // Pass the authService instance to the handler when setting up the listener
+            logoutButton.addEventListener('click', () => handleLogout(authService));
+        }
 
-    // Handle form submission when user presses Enter or clicks Send
-    chatForm.addEventListener('submit', handleSubmit);
+        // --- Initial Load for Chat UI ---
+        console.log("Loading initial chat messages...");
+        loadMessages(); // Load messages from localStorage
+        updateLoadingState(false); // Ensure UI is not in loading state initially
+        if (chatInput) chatInput.focus(); // Set focus to input field
 
-    // Handle click on the "Clear History" button
-    clearHistoryButton.addEventListener('click', clearHistory);
-
-    // --- Initialization ---
-    // Run when the DOM is fully loaded and parsed
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log("DOM fully loaded. Initializing chat interface.");
-        loadMessages(); // Load existing messages from storage
-        updateLoadingState(false); // Ensure UI is in the correct initial state
-        chatInput.focus(); // Set focus to the input field on load
-    });
+    } // End of initializeChatInterface
 
 </script>
 
