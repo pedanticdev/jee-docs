@@ -15,9 +15,9 @@ import dev.langchain4j.store.embedding.EmbeddingStoreIngestor;
 import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import jakarta.annotation.Resource;
 import jakarta.annotation.sql.DataSourceDefinition;
-import jakarta.ejb.Singleton;
 import jakarta.enterprise.concurrent.ManagedExecutorService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -27,8 +27,9 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import javax.sql.DataSource;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -67,11 +68,11 @@ public class PostgresEmbeddingService implements EmbeddingService {
     String textEmbedding;
 
     @Inject
-    @ConfigProperty(name = "embedding.timer.initial.delay.minutes", defaultValue = "2")
+    @ConfigProperty(name = "embedding.timer.initial.delay.minutes", defaultValue = "1")
     private long initialDelayMinutes;
 
     @Inject
-    @ConfigProperty(name = "embedding.timer.interval.minutes", defaultValue = "60")
+    @ConfigProperty(name = "embedding.timer.interval.minutes", defaultValue = "1")
     private long intervalMinutes;
 
     @Inject
@@ -81,7 +82,7 @@ public class PostgresEmbeddingService implements EmbeddingService {
     EmbeddingStore<TextSegment> embeddingStore;
     DocumentSplitter splitter;
     EmbeddingStoreIngestor ingestor;
-    final Timer timer = new Timer();
+    final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     @PostConstruct
     void init() {
@@ -110,49 +111,58 @@ public class PostgresEmbeddingService implements EmbeddingService {
                         .embeddingStore(embeddingStore)
                         .build();
 
-        timer.scheduleAtFixedRate(
-                new TimerTask() {
-                    @Override
-                    public void run() {
-//                        managedExecutorService.submit(() -> embedNewDocs());
+
+
+        scheduler.scheduleAtFixedRate(
+                () -> {
+                    try {
                         embedNewDocs();
+                    } catch (Exception e) {
+                        log.log(Level.SEVERE, "An exception occurred running timer...", e);
                     }
                 },
-                initialDelayMinutes * 60 * 1000L,
-                intervalMinutes * 1000L);
+                initialDelayMinutes * 60,
+                intervalMinutes * 60,
+                TimeUnit.SECONDS
+        );
+
+
     }
 
     public void embedNewDocs() {
         log.log(Level.INFO, "Starting document embedding");
         List<String> strings = documentLoader.listObjects();
-        log.log(Level.INFO, "About to embed found blob objects {0}", strings);
+        if (!strings.isEmpty()) {
+            log.log(Level.INFO, "About to embed found blob objects {0}", strings);
+            List<Document> documents = new ArrayList<>();
+            List<String> embeddedObjects = new ArrayList<>();
+            try {
+                for (String string : strings) {
+                    documents.add(documentLoader.loadDocument(string));
+                    embeddedObjects.add(string);
+                }
+                List<TextSegment> textSegments = new ArrayList<>();
+                for (Document document : documents) {
+                    textSegments.addAll(splitter.split(document));
+                    log.log(Level.INFO, "About to embed text segments {0}", textSegments);
+                    List<Embedding> embeddings = embeddingModel.embedAll(textSegments).content();
 
-        List<Document> documents = new ArrayList<>();
-        List<String> embeddedObjects = new ArrayList<>();
-        try {
-            for (String string : strings) {
-                documents.add(documentLoader.loadDocument(string));
-                embeddedObjects.add(string);
+                    log.log(Level.INFO, "About to embed {0}", embeddings);
+                    embeddingStore.addAll(embeddings, textSegments);
+                    ingestor.ingest(documents);
+                }
+            } catch (Exception e) {
+                log.log(Level.SEVERE, "An error occurred while processing embeddings", e);
             }
-            List<TextSegment> textSegments = new ArrayList<>();
-            for (Document document : documents) {
-                textSegments.addAll(splitter.split(document));
-                log.log(Level.INFO, "About to embed text segments {0}", textSegments);
-                List<Embedding> embeddings = embeddingModel.embedAll(textSegments).content();
-
-                log.log(Level.INFO, "About to embed {0}", embeddings);
-                embeddingStore.addAll(embeddings, textSegments);
-                ingestor.ingest(documents);
-                log.log(Level.INFO,"Embedding complete");
+            if (!embeddedObjects.isEmpty()) {
+                log.log(Level.INFO, "Moving embedded objects {0}", embeddedObjects);
+                documentLoader.moveEmbeddedDocument(embeddedObjects);
             }
-        } catch (Exception e) {
-            log.log(Level.SEVERE, "An error occurred while processing embeddings", e);
-        }
-        if (!embeddedObjects.isEmpty()) {
-            log.log(Level.INFO, "Moving embedded objects {0}", embeddedObjects);
-            documentLoader.moveEmbeddedDocument(embeddedObjects);
+        } else {
+            log.log(Level.INFO, "No documents found");
         }
     }
+
 
     @WithSpan("Get Content Retriever")
     public ContentRetriever getContentRetriever() {
@@ -161,5 +171,10 @@ public class PostgresEmbeddingService implements EmbeddingService {
                 .embeddingModel(embeddingModel)
                 .maxResults(1)
                 .build();
+    }
+
+    @PreDestroy
+    void cleanup() {
+        scheduler.shutdownNow();
     }
 }

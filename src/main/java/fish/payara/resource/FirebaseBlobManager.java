@@ -119,7 +119,7 @@ public class FirebaseBlobManager implements EmbeddingDocumentLoader {
                 Storage.BlobListOption.currentDirectory()
         );
         for (Blob blob : blobs.iterateAll()) {
-            if (!blob.getName().endsWith("/")) {  // Skip directories
+            if (!blob.getName().endsWith("/")) {
                 fileNames.add(blob.getName());
             }
         }
