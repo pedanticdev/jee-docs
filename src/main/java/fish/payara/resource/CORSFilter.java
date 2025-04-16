@@ -19,46 +19,42 @@ public class CORSFilter implements ContainerResponseFilter {
     @ConfigProperty(name = "env", defaultValue = "dev")
     String env;
     @Inject
-    @ConfigProperty(name = "allowed.origins", defaultValue = "http://localhost:3000")
+    @ConfigProperty(name = "allowed.origins", defaultValue = "*")
     String allowedOrigins;
 
     public static final String ALLOWED_METHODS = "GET, POST, PUT, DELETE, OPTIONS, HEAD";
     public final static int MAX_AGE = 42 * 60 * 60;
-    public final static String DEFAULT_ALLOWED_HEADERS = "origin,accept,content-type";
+    public final static String DEFAULT_ALLOWED_HEADERS = "origin,accept,content-type,authorization,x-requested-with,access-control-request-method,access-control-request-headers";
     public final static String DEFAULT_EXPOSED_HEADERS = "location,info";
 
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
-
         Logger.getLogger(CORSFilter.class.getSimpleName()).log(Level.INFO, "CORS filter enabled. Allowed origins: {0}", allowedOrigins);
         final MultivaluedMap<String, Object> headers = responseContext.getHeaders();
+
+        // Always add the Origin header
+        headers.add("Access-Control-Allow-Origin", allowedOrigins);
+        headers.add("Access-Control-Allow-Credentials", "true");
+
         // Handle preflight
         if (requestContext.getMethod().equalsIgnoreCase("OPTIONS")) {
-            headers.add("Access-Control-Allow-Origin", allowedOrigins);
             headers.add("Access-Control-Allow-Methods", ALLOWED_METHODS);
-            headers.add("Access-Control-Allow-Headers", "Access-Control-Allow-Headers, Access-Control-Allow-Origin, Origin, Accept, Authorization, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers");
-            headers.add("Access-Control-Allow-Credentials", "true");
+            headers.add("Access-Control-Allow-Headers", DEFAULT_ALLOWED_HEADERS);
             headers.add("Access-Control-Max-Age", "1209600");
             responseContext.setStatus(Response.Status.OK.getStatusCode());
-
             return;
         }
 
         // Non-preflight requests
-        headers.add("Access-Control-Allow-Credentials", "true");
-        headers.add("Access-Control-Expose-Headers", "Access-Control-Allow-Headers, Access-Control-Allow-Origin, Origin, Accept, Authorization, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers");
-        responseContext.setStatus(Response.Status.OK.getStatusCode());
-
-
+        headers.add("Access-Control-Expose-Headers", DEFAULT_EXPOSED_HEADERS);
     }
 
     private boolean isProd() {
-        // Implement your environment check logic here
         return env.equalsIgnoreCase("prod");
     }
 
     String getRequestedAllowedHeaders(ContainerRequestContext responseContext) {
-        List<String> headers = responseContext.getHeaders().get("Access-Control-Allow-Headers");
+        List<String> headers = responseContext.getHeaders().get("Access-Control-Request-Headers");
         return createHeaderList(headers, DEFAULT_ALLOWED_HEADERS);
     }
 

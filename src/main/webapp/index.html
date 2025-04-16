@@ -381,17 +381,17 @@
 
             // MOCK API response for testing
             // This simulates a successful response from the server
-            setTimeout(() => {
-                const botMessage = {
-                    content: `You said: "${userInput}" - This is a simulated response.`,
-                    isUser: false
-                };
-                messages.push(botMessage);
-                addMessageToDOM(botMessage);
-                updateLoadingState(false);
-            }, 1000);
+            // setTimeout(() => {
+            //     const botMessage = {
+            //         content: `You said: "${userInput}" - This is a simulated response.`,
+            //         isUser: false
+            //     };
+            //     messages.push(botMessage);
+            //     addMessageToDOM(botMessage);
+            //     updateLoadingState(false);
+            // }, 1000);
 
-            /* Real API implementation - commented out for testing
+            //Real API implementation - commented out for testing
             // Get fresh authentication token
             const token = await getAuthToken(authService);
 
@@ -472,7 +472,7 @@
             } finally {
                 updateLoadingState(false);
             }
-            */
+
         }
 
         // --- History and Logout ---
